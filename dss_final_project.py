@@ -18,7 +18,7 @@ st.markdown("Analyzing how smartphone usage habits influence **Work Productivity
 # --- Load Data ---
 @st.cache_data
 def load_data():
-    df = pd.read_csv("Smartphone_Usage_Productivity_Dataset_50000.csv")
+    df = pd.read_csv("Smartphone_Usage_Productivity_Dataset_50000 (2).csv")
     df = df.sample(10000, random_state=42)
     df = df.drop_duplicates()
     return df
