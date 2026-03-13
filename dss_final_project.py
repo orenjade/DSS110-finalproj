@@ -154,7 +154,7 @@ st.markdown('<div class="main-subtitle">How smartphone usage habits shape work p
 # ── Load data ─────────────────────────────────────────────────────────────────
 @st.cache_data
 def load_data():
-    df = pd.read_csv("Smartphone_Usage_Productivity_Dataset_50000 (2) .csv")
+    df = pd.read_csv("Smartphone_Usage_Productivity_Dataset_50000 (2).csv")
     df = df.sample(10000, random_state=42)
     return df.drop_duplicates()
 
