@@ -154,11 +154,24 @@ st.markdown('<div class="main-subtitle">How smartphone usage habits shape work p
 # ── Load data ─────────────────────────────────────────────────────────────────
 @st.cache_data
 def load_data():
-    df = pd.read_csv("Smartphone_Usage_Productivity_Dataset_50000 (2).csv")
+    df = pd.read_csv("Smartphone_Usage_Productivity_Dataset_50000.csv")
     df = df.sample(10000, random_state=42)
     return df.drop_duplicates()
 
 df = load_data()
+
+# ── Pre-train RF model at startup (cached) ───────────────────────────────────
+@st.cache_resource
+def get_rf(_df):
+    df_enc = pd.get_dummies(_df, drop_first=True)
+    X = df_enc.drop('Work_Productivity_Score', axis=1)
+    y = df_enc['Work_Productivity_Score']
+    X_train, _, y_train, _ = train_test_split(X, y, test_size=0.2, random_state=42)
+    sc = StandardScaler()
+    rf = RandomForestRegressor(n_estimators=50, random_state=42).fit(sc.fit_transform(X_train), y_train)
+    return rf, sc, X.columns.tolist()
+
+rf_model, scaler_model, feature_cols = get_rf(df)
 
 # ═════════════════════════════════════════════
 # OVERVIEW
@@ -365,17 +378,6 @@ elif section == "Predict Score":
     device = st.selectbox("Device Type", ["Android", "iOS"])
 
     if st.button("Generate Prediction"):
-        @st.cache_data
-        def get_rf(df):
-            df_enc = pd.get_dummies(df, drop_first=True)
-            X = df_enc.drop('Work_Productivity_Score', axis=1)
-            y = df_enc['Work_Productivity_Score']
-            X_train, _, y_train, _ = train_test_split(X, y, test_size=0.2, random_state=42)
-            sc = StandardScaler()
-            rf = RandomForestRegressor(random_state=42).fit(sc.fit_transform(X_train), y_train)
-            return rf, sc, X.columns.tolist()
-
-        rf_m, sc_m, cols = get_rf(df)
         new_enc = pd.get_dummies(pd.DataFrame([{
             'Daily_Phone_Hours': daily_phone, 'Social_Media_Hours': social_media,
             'Sleep_Hours': sleep_hours, 'Stress_Level': stress_level,
@@ -383,10 +385,31 @@ elif section == "Predict Score":
             'Caffeine_Intake_Cups': caffeine, 'Age': age,
             'Gender': gender, 'Device_Type': device
         }]), drop_first=True)
-        for c in cols:
+        for c in feature_cols:
             if c not in new_enc.columns:
                 new_enc[c] = 0
-        pred = rf_m.predict(sc_m.transform(new_enc[cols]))[0]
+        pred = rf_model.predict(scaler_model.transform(new_enc[feature_cols]))[0]
+
+        if pred <= 3.5:
+            band_color = "#4A7C6F"
+            band_label = "Low Phone Impact"
+            band_desc  = "Productivity is largely unaffected by smartphone usage. Other factors like environment, workload, or sleep are likely the main drivers."
+            band_range = "1.0 – 3.5"
+        elif pred <= 5.5:
+            band_color = "#8B7355"
+            band_label = "Moderate Phone Impact"
+            band_desc  = "Smartphone habits show a noticeable but moderate relationship with productivity. Reducing recreational screen time may yield meaningful gains."
+            band_range = "3.6 – 5.5"
+        elif pred <= 7.5:
+            band_color = "#B05C3A"
+            band_label = "High Phone Impact"
+            band_desc  = "Smartphone usage patterns appear to significantly influence productivity. Weekend screen time and social media usage are likely key contributors."
+            band_range = "5.6 – 7.5"
+        else:
+            band_color = "#8B2020"
+            band_label = "Very High Phone Impact"
+            band_desc  = "Productivity is strongly associated with heavy smartphone use. Structured digital habits or screen-time limits are strongly advised."
+            band_range = "7.6 – 10.0"
 
         st.markdown(f"""
         <div style="background:#EEF2F0;border-left:4px solid #4A7C6F;border-radius:0 4px 4px 0;
@@ -396,6 +419,37 @@ elif section == "Predict Score":
             </div>
             <div style="font-family:'Lora',serif;font-size:2.8rem;font-weight:600;color:#1C2B2D;margin-top:0.2rem;">
                 {pred:.2f}
+            </div>
+        </div>
+        <div style="background:#FFFFFF;border:1px solid #E0D8CC;border-left:4px solid {band_color};
+                    border-radius:0 4px 4px 0;padding:1.1rem 1.4rem;margin-top:0.8rem;">
+            <div style="margin-bottom:0.4rem;">
+                <span style="background:{band_color};color:#fff;font-size:0.75rem;font-weight:600;
+                             text-transform:uppercase;letter-spacing:0.8px;padding:0.2rem 0.6rem;
+                             border-radius:3px;">{band_label}</span>
+                &nbsp;&nbsp;<span style="font-size:0.8rem;color:#888;">Score range: {band_range}</span>
+            </div>
+            <div style="font-size:0.92rem;color:#444;line-height:1.6;">{band_desc}</div>
+        </div>
+        <div style="margin-top:1.2rem;">
+            <div style="font-size:0.78rem;text-transform:uppercase;letter-spacing:1px;color:#888;margin-bottom:0.6rem;">Score Scale</div>
+            <div style="display:flex;flex-direction:column;gap:0.4rem;">
+                <div style="display:flex;align-items:center;gap:0.7rem;">
+                    <div style="width:12px;height:12px;border-radius:2px;background:#4A7C6F;flex-shrink:0;"></div>
+                    <span style="font-size:0.85rem;color:#333;"><strong>1.0 – 3.5 &nbsp; Low Impact</strong> &nbsp;·&nbsp; Productivity largely unaffected by phone usage</span>
+                </div>
+                <div style="display:flex;align-items:center;gap:0.7rem;">
+                    <div style="width:12px;height:12px;border-radius:2px;background:#8B7355;flex-shrink:0;"></div>
+                    <span style="font-size:0.85rem;color:#333;"><strong>3.6 – 5.5 &nbsp; Moderate Impact</strong> &nbsp;·&nbsp; Noticeable but manageable phone influence</span>
+                </div>
+                <div style="display:flex;align-items:center;gap:0.7rem;">
+                    <div style="width:12px;height:12px;border-radius:2px;background:#B05C3A;flex-shrink:0;"></div>
+                    <span style="font-size:0.85rem;color:#333;"><strong>5.6 – 7.5 &nbsp; High Impact</strong> &nbsp;·&nbsp; Phone habits significantly shape productivity</span>
+                </div>
+                <div style="display:flex;align-items:center;gap:0.7rem;">
+                    <div style="width:12px;height:12px;border-radius:2px;background:#8B2020;flex-shrink:0;"></div>
+                    <span style="font-size:0.85rem;color:#333;"><strong>7.6 – 10.0 &nbsp; Very High Impact</strong> &nbsp;·&nbsp; Heavy usage strongly associated with lower output</span>
+                </div>
             </div>
         </div>
         """, unsafe_allow_html=True)
